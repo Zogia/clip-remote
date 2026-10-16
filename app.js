@@ -33,7 +33,7 @@ async function connect() {
   }
   try {
     device = await navigator.bluetooth.requestDevice({
-      filters: [{ name: 'Air-Mouse' }, { namePrefix: 'Air' }],
+      filters: [{ name: 'Hairclip' }, { namePrefix: 'Air' }],   // ("Air..." for older firmware and the air mouse page)
       optionalServices: [NUS],
     });
     device.addEventListener('gattserverdisconnected', onDisconnected);
