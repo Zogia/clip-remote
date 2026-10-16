@@ -353,7 +353,7 @@ function setupControls() {
 const W = 284, H = 76;
 const canvas = $('preview');
 const ctx = canvas.getContext('2d');
-const P = { index: 0, x: W, y: H / 2, dx: 1, dy: 1, age: 0, t: 0, hue: 0, last: 0, letters: [] };
+const P = { index: 0, x: W, y: H / 2, dx: 1, dy: 1, age: 0, t: 0, hue: 0, dvdHit: false, dvdBase: '', last: 0, letters: [] };
 
 function fontCss() {
   const s = state.size;
@@ -378,6 +378,7 @@ function restartPreview() {
   P.dx = Math.random() < 0.5 ? 1 : -1;
   P.dy = Math.random() < 0.5 ? 1 : -1;
   P.letters = [];
+  if (state.mode !== 'bounce') P.dvdHit = false;
   if (state.mode === 'bounce') {
     ctx.font = fontCss().css;
     const w = ctx.measureText(currentText()).width;
@@ -398,7 +399,9 @@ function colorFor(i) {
   switch (state.fx) {
     case 'rainbow': case 'party': return `hsl(${(P.t / 6 + i * 28) % 360}, 100%, 50%)`;
     case 'flash': return `hsl(${(Math.floor(P.t / 250) * 67) % 360}, 100%, 50%)`;
-    case 'dvd': return `hsl(${P.hue}, 100%, 50%)`;
+    case 'dvd':                                     // the chosen color until the text bumps an edge (as on the clip)
+      if (state.fg !== P.dvdBase) { P.dvdBase = state.fg; P.dvdHit = false; }
+      return P.dvdHit ? `hsl(${P.hue}, 100%, 50%)` : '#' + state.fg;
     default: return '#' + state.fg;
   }
 }
@@ -452,7 +455,7 @@ function frame(now) {
       } else {
         P.y = H / 2;
       }
-      if (hit) P.hue = (P.hue + 60 + Math.random() * 240) % 360;
+      if (hit) { P.hue = (P.hue + 60 + Math.random() * 240) % 360; P.dvdHit = true; }
     }
     if (!scroll && state.msgs.length > 1 && P.age >= state.hold * 1000) nextMessage();
   }
