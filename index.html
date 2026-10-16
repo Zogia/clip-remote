@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Clip Remote</title>
+  <meta name="theme-color" content="#16121c">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon-192.png">
+  <style>
+    :root {
+      --bg: #16121c; --card: #221c2b; --line: #3a3147; --text: #f3eef8; --muted: #a99bb8;
+      --accent: #ff69b4; --accent-text: #1a0f16; --danger: #ff6b6b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      padding: max(12px, env(safe-area-inset-top)) 16px 40px;
+    }
+    header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+    header h1 { font-size: 20px; margin: 0; flex: 1; }
+    #status { color: var(--muted); font-size: 14px; }
+    body[data-link="on"] #status { color: #6ee7a8; }
+    #battery { font-size: 14px; color: var(--muted); }
+    button {
+      font: inherit; color: var(--text); background: var(--card); border: 1px solid var(--line);
+      border-radius: 10px; padding: 10px 12px; min-height: 44px; cursor: pointer;
+    }
+    button.selected { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+    button:disabled { opacity: 0.4; }
+    button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+    button.danger { color: var(--danger); border-color: var(--danger); }
+    button.icon { min-width: 44px; padding: 0; }
+    #connectBtn { min-width: 112px; }
+    body[data-link="off"] #connectBtn { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+    .preview-wrap { position: sticky; top: 0; z-index: 2; background: var(--bg); padding: 4px 0 10px; }
+    #preview {
+      display: block; width: 100%; aspect-ratio: 284 / 76; border-radius: 10px; border: 2px solid #000;
+      image-rendering: pixelated; background: #000;
+    }
+    .note { color: var(--muted); font-size: 13px; margin: 4px 0 0; }
+    section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
+    section h2 { font-size: 15px; margin: 0 0 10px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; }
+    .row > button { flex: 1 1 auto; }
+    .field { margin: 12px 0 0; }
+    .field:first-of-type { margin-top: 0; }
+    .field label { display: flex; justify-content: space-between; font-size: 14px; color: var(--muted); margin-bottom: 6px; }
+    .field label span { color: var(--text); }
+    input[type="range"] { width: 100%; accent-color: var(--accent); height: 32px; }
+    input[type="text"] {
+      width: 100%; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line);
+      border-radius: 10px; padding: 10px 12px; min-height: 44px;
+    }
+    input[type="color"] { width: 52px; height: 44px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); padding: 3px; }
+    #msgList { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 8px; }
+    #msgList li, .add { display: flex; gap: 8px; }
+    .colors { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+    #fgSw, #bgSw { flex: 1 1 0; }
+    .swatch { width: 32px; height: 32px; min-height: 32px; padding: 0; border-radius: 50%; border: 2px solid var(--line); }
+    #log {
+      background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 8px; margin: 8px 0 0;
+      height: 120px; overflow: auto; font: 12px/1.4 ui-monospace, Menlo, monospace; color: var(--muted); white-space: pre-wrap;
+    }
+    #toast {
+      position: fixed; left: 16px; right: 16px; bottom: 20px; background: #000; color: #fff; padding: 12px 14px;
+      border-radius: 12px; opacity: 0; transform: translateY(20px); transition: 0.2s; pointer-events: none; z-index: 5;
+    }
+    #toast.show { opacity: 1; transform: none; }
+    #noBt { background: #4a1f2a; border-color: var(--danger); }
+    details summary { cursor: pointer; color: var(--muted); font-weight: 600; }
+  </style>
+</head>
+<body data-link="off">
+  <header>
+    <h1>Clip Remote</h1>
+    <span id="battery"></span>
+    <button id="connectBtn" type="button">Connect</button>
+  </header>
+  <p id="status" class="note">Not connected</p>
+
+  <section id="noBt" hidden>
+    This browser can't use Bluetooth. Open this page in <b>Chrome on Android</b>.
+  </section>
+
+  <div class="preview-wrap">
+    <canvas id="preview" width="284" height="76"></canvas>
+    <p class="note">Preview (approximate). Turn on Bluetooth in the clip's Settings, then tap Connect and pick "Air-Mouse".</p>
+  </div>
+
+  <section>
+    <h2>Messages</h2>
+    <ul id="msgList"></ul>
+    <div class="add">
+      <input id="newMsg" type="text" maxlength="80" placeholder="New message">
+      <button id="addBtn" type="button" class="primary">Add</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Look</h2>
+    <div class="field">
+      <label>Text color</label>
+      <div class="colors"><input id="fg" type="color"><div id="fgSw" class="colors"></div></div>
+    </div>
+    <div class="field">
+      <label>Background</label>
+      <div class="colors"><input id="bg" type="color"><div id="bgSw" class="colors"></div></div>
+    </div>
+    <div class="field">
+      <label>Font</label>
+      <div id="fontRow" class="row"></div>
+    </div>
+    <div class="field">
+      <label>Size <span id="sizeVal"></span></label>
+      <input id="size" type="range" min="1" max="2" step="1">
+    </div>
+  </section>
+
+  <section>
+    <h2>Motion</h2>
+    <div class="field">
+      <label>Mode</label>
+      <div id="modeRow" class="row"></div>
+    </div>
+    <div class="field">
+      <label>Effect</label>
+      <div id="fxRow" class="row"></div>
+    </div>
+    <div class="field">
+      <label>Speed <span id="speedVal"></span></label>
+      <input id="speed" type="range" min="1" max="15" step="1">
+    </div>
+    <div class="field" id="holdRow">
+      <label>Each message stays <span id="holdVal"></span></label>
+      <input id="hold" type="range" min="2" max="60" step="1">
+    </div>
+    <div class="row field">
+      <button id="pauseBtn" type="button">Pause</button>
+      <button id="shakeBtn" type="button">Shake</button>
+      <button id="resetBtn" type="button">Reset look</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Presets</h2>
+    <div class="row">
+      <button id="load1" type="button">Load 1</button>
+      <button id="load2" type="button">Load 2</button>
+      <button id="save1" type="button">Save 1</button>
+      <button id="save2" type="button">Save 2</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Clip</h2>
+    <div class="field">
+      <label>Brightness <span id="brightVal"></span></label>
+      <input id="bright" type="range" min="1" max="10" step="1">
+    </div>
+    <div class="row field">
+      <button id="flipBtn" type="button">Upside down</button>
+      <button id="wifiBtn" type="button">Wi-Fi</button>
+      <button id="iconBtn" type="button">Battery icon</button>
+    </div>
+    <div class="row field">
+      <button id="batteryBtn" type="button">Battery info</button>
+      <button id="btOffBtn" type="button" class="danger">Bluetooth off</button>
+    </div>
+    <p id="batteryInfo" class="note"></p>
+  </section>
+
+  <section>
+    <details>
+      <summary>Advanced: type a command</summary>
+      <form id="cmdForm" class="add field">
+        <input id="cmd" type="text" placeholder=".help" autocapitalize="off" autocomplete="off">
+        <button type="submit">Send</button>
+      </form>
+      <pre id="log"></pre>
+    </details>
+  </section>
+
+  <div id="toast" role="status"></div>
+  <script src="app.js"></script>
+</body>
+</html>
