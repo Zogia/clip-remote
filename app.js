@@ -355,10 +355,36 @@ const canvas = $('preview');
 const ctx = canvas.getContext('2d');
 const P = { index: 0, x: W, y: H / 2, dx: 1, dy: 1, age: 0, t: 0, hue: 0, dvdHit: false, dvdBase: '', last: 0, letters: [] };
 
+// The clip's "pixel" font is the display library's classic 5x7 dot font (TFT_eSPI glcdfont.c), copied here so the
+// preview draws exactly the same dots: characters 32 to 126, 5 columns each, lowest bit = top row, 6 dots apart.
+const GLCD = '000000000000005f00000007000700147f147f14242a7f2a12231308646236495620500008070300001c2241000041221c002a1c7f1c2a08083e080800807030000808080808000060600020100804023e5149453e00427f400072494949462141494d331814127f1027454545393c4a49493141211109073649494936464949291e0000140000004034000000081422411414141414004122140802015909063e415d594e7c1211127c7f494949363e414141227f4141413e7f494949417f090909013e414151737f0808087f00417f41002040413f017f081422417f404040407f021c027f7f0408107f3e4141413e7f090909063e4151215e7f09192946264949493203017f01033f4040403f1f2040201f3f4038403f631408146303047804036159494d43007f4141410204081020004141417f04020102044040404040000307080020545478407f284444383844444428384444287f385454541800087e090218a4a49c787f0804047800447d40002040403d007f1028440000417f40007c047804787c080404783844444438fc1824241818242418fc7c08040408485454542404043f44243c4040207c1c2040201c3c4030403c44281028444c9090907c4464544c440008364100000077000000413608000201020402';
+
+function isPixel() { return state.font === 'pixel'; }
+
+function textW(str) {                        // how wide a piece of text is in the current font
+  return isPixel() ? str.length * 6 * state.size : ctx.measureText(str).width;
+}
+
+// draw text with its left edge at x and its middle at y, in the current fill color
+function drawStr(str, x, y) {
+  if (!isPixel()) { ctx.fillText(str, x, y); return; }
+  const s = state.size, top = Math.round(y - 4 * s);
+  for (let i = 0; i < str.length; i++) {
+    let code = str.charCodeAt(i);
+    if (code < 32 || code > 126) code = 63;   // ('?' for anything the font doesn't have)
+    const at = (code - 32) * 10;
+    const cx = Math.round(x) + i * 6 * s;
+    for (let col = 0; col < 5; col++) {
+      const bits = parseInt(GLCD.substr(at + col * 2, 2), 16);
+      for (let row = 0; row < 8; row++) if (bits & (1 << row)) ctx.fillRect(cx + col * s, top + row * s, s, s);
+    }
+  }
+}
+
 function fontCss() {
   const s = state.size;
   switch (state.font) {
-    case 'pixel': return { css: `bold ${Math.round(9 * s)}px "Courier New", monospace`, h: 7 * s };
+    case 'pixel': return { css: `${8 * s}px monospace`, h: 8 * s };   // (drawn dot by dot: see drawStr)
     case 'sans': return { css: `bold ${Math.round(40 * s)}px Arial, Helvetica, sans-serif`, h: 40 * s };
     case 'serif': return { css: `bold ${Math.round(40 * s)}px Georgia, "Times New Roman", serif`, h: 40 * s };
     case 'mono': return { css: `bold ${Math.round(38 * s)}px "Courier New", monospace`, h: 38 * s };
@@ -381,7 +407,7 @@ function restartPreview() {
   if (state.mode !== 'bounce') P.dvdHit = false;
   if (state.mode === 'bounce') {
     ctx.font = fontCss().css;
-    const w = ctx.measureText(currentText()).width;
+    const w = textW(currentText());
     P.x = Math.random() * Math.max(0, W - w);
   }
 }
@@ -429,7 +455,7 @@ function frame(now) {
   ctx.fillRect(0, 0, W, H);
   ctx.font = f.css;
   ctx.textBaseline = 'middle';
-  const w = ctx.measureText(text).width;
+  const w = textW(text);
   const still = state.mode === 'still' && w <= W;
   const scroll = state.mode === 'scroll' || (state.mode === 'still' && !still);
   const jelly = state.mode === 'jelly' || state.mode === 'jellybounce';
@@ -468,14 +494,14 @@ function frame(now) {
     const perLetter = ['rainbow', 'wave', 'party'].includes(state.fx);
     if (!perLetter) {
       ctx.fillStyle = colorFor(0);
-      ctx.fillText(text, x0, y0);
+      drawStr(text, x0, y0);
     } else {
       const amp = (state.fx === 'wave' || state.fx === 'party') ? Math.max(0, Math.min(10, (H - f.h) / 2 - 1)) : 0;
       for (let i = 0; i < text.length; i++) {
-        const x = x0 + ctx.measureText(text.slice(0, i)).width;
+        const x = x0 + textW(text.slice(0, i));
         if (x > W || x < -60) continue;
         ctx.fillStyle = colorFor(i);
-        ctx.fillText(text[i], x, y0 + Math.sin(P.t / 140 + i * 0.7) * amp);
+        drawStr(text[i], x, y0 + Math.sin(P.t / 140 + i * 0.7) * amp);
       }
     }
   }
@@ -490,7 +516,7 @@ function drawJelly(text, w, dt) {
     const fit = w > W - 8 ? (W - 8) / w : 1;
     let x = (W - w * fit) / 2;
     for (let i = 0; i < text.length; i++) {
-      const cw = ctx.measureText(text[i]).width;
+      const cw = textW(text[i]);
       if (text[i] !== ' ') {
         const speed = 40 + state.speed * 25;
         const a = Math.random() * Math.PI * 2;
@@ -518,8 +544,12 @@ function drawJelly(text, w, dt) {
     ctx.translate(l.x, l.y);
     ctx.rotate(Math.sin(P.t / 400 + l.i * 1.3) * 0.15);
     ctx.fillStyle = (state.fx === 'dvd' && l.hue !== undefined) ? `hsl(${l.hue},100%,50%)` : colorFor(l.i);
-    ctx.textAlign = 'center';
-    ctx.fillText(l.ch, 0, 0);
+    if (isPixel()) {
+      drawStr(l.ch, -textW(l.ch) / 2, 0);
+    } else {
+      ctx.textAlign = 'center';
+      ctx.fillText(l.ch, 0, 0);
+    }
     ctx.restore();
   }
   ctx.textAlign = 'left';
