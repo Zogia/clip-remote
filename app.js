@@ -1,6 +1,8 @@
 'use strict';
 // Clip Remote: controls the hair clip over Bluetooth (the same "Nordic UART" text commands as Serial Bluetooth Terminal).
 
+const VERSION = 6;   // shown on the page; keep in step with CACHE in sw.js
+
 const NUS = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
 const RX = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';   // phone -> clip
 const TX = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';   // clip -> phone
@@ -562,4 +564,14 @@ restartPreview();
 setStatus('off');
 requestAnimationFrame(frame);
 if (!navigator.bluetooth) $('noBt').hidden = false;
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});   // works offline after the first visit
+$('version').textContent = 'v' + VERSION;
+// The offline copy (sw.js): the app works without internet after the first visit. With internet, it checks for a new
+// version every time it opens, and reloads itself once when one has arrived (so updates show up without reopening).
+if ('serviceWorker' in navigator) {
+  const hadCopy = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.register('sw.js').then((reg) => reg.update()).catch(() => {});
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (hadCopy && !reloaded) { reloaded = true; location.reload(); }
+  });
+}
