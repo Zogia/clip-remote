@@ -1,7 +1,7 @@
 'use strict';
 // Clip Remote: controls the hair clip over Bluetooth (the same "Nordic UART" text commands as Serial Bluetooth Terminal).
 
-const VERSION = 6;   // shown on the page; keep in step with CACHE in sw.js
+const VERSION = 8;   // shown on the page; keep in step with CACHE in sw.js
 
 const NUS = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
 const RX = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';   // phone -> clip
@@ -58,6 +58,7 @@ async function openLink() {
   rxBuffer = '';
   setStatus('on');
   send('.state');
+  send('#apps');      // which apps the clip has, and which one is showing (newer firmware; older ignores it)
 }
 
 function disconnect() {
@@ -115,9 +116,35 @@ function onLine(line) {
     parseState(line);
     return;
   }
+  if (line.startsWith('@apps|')) { clipApps = line.slice(6).split('|').filter(Boolean); renderApps(); return; }
+  if (line.startsWith('@app|')) { clipShowing = line.slice(5).trim(); renderApps(); return; }
+  if (line.startsWith('@')) return;   // (for the Hairclip phone app: music controls, the quick switch...)
   log('< ' + line);
   if (line.startsWith('battery ')) $('batteryInfo').textContent = line;
   else if (line.startsWith('unknown command')) toast('The clip needs a firmware update for this button');
+}
+
+// ------------------------------------------------------------------ which app the clip shows
+// Newer firmware has several apps (Text, Music...). The text settings here reach the Text app; while another app is
+// showing they wait, and show up when you switch to Text.
+let clipApps = [], clipShowing = '';
+
+function renderApps() {
+  const row = $('appsRow');
+  $('appsSection').hidden = clipApps.length === 0;
+  row.textContent = '';
+  for (const name of clipApps.concat(['Home'])) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = name;
+    if (name.toLowerCase() === clipShowing.toLowerCase()) b.classList.add('selected');
+    b.addEventListener('click', () => { if (send('#app|' + (name === 'Home' ? 'home' : name))) { clipShowing = name; renderApps(); } });
+    row.appendChild(b);
+  }
+  const textShowing = clipShowing.toLowerCase() === 'text';
+  $('appsNote').textContent = textShowing || !clipShowing ? '' :
+    'The clip is showing ' + (clipShowing === 'home' ? 'its home menu' : clipShowing) +
+    '. Your text changes wait until you switch to Text.';
 }
 
 // "state v=1 fg=FFFFFF ... msgs=one|two"  (msgs is last because it may contain spaces)

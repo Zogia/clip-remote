@@ -1,6 +1,6 @@
 // Keeps a copy of the remote on the phone, so it opens and works without internet after the first visit.
 // When the app is changed, raise the version number below: the phone then picks up the new copy on its next visit.
-const CACHE = 'clip-remote-v6';
+const CACHE = 'clip-remote-v8';
 const FILES = ['./', 'index.html', 'app.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', (event) => {
